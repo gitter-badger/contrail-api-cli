@@ -11,7 +11,6 @@ from pathlib import PurePosixPath
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import Completer, Completion
 
-
 COMPLETION_QUEUE = Queue()
 
 
@@ -26,8 +25,9 @@ class PathEncoder(json.JSONEncoder):
 class FullPathEncoder(json.JSONEncoder):
 
     def default(self, obj):
+        from contrail_api_cli.client import APIClient
         if isinstance(obj, Path):
-            return obj.url
+            return APIClient.base_url + str(obj)
         return super(self, FullPathEncoder).default(obj)
 
 

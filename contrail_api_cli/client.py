@@ -60,6 +60,14 @@ class APIClient:
             return r.json(object_hook=utils.decode_paths)
         raise APIError(r.text)
 
+    def put(self, path, data=None):
+        headers = {"content-type": "application/json"}
+        r = requests.put(self._get_url(path), data=utils.to_json(data),
+                         headers=headers)
+        if r.status_code == 200:
+            return True
+        raise APIError(r.text)
+
     def fqname_to_id(self, path, fq_name):
         """
         Return Path for fq_name

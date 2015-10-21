@@ -1,9 +1,13 @@
 import inspect
 import argparse
 import json
+import os
+import subprocess
+import tempfile
 
-from pygments import highlight
-from pygments.lexers import JsonLexer
+import json_delta
+
+from pygments import highlight, lexers
 from pygments.formatters import Terminal256Formatter
 
 from contrail_api_cli import utils
@@ -85,7 +89,7 @@ class Ls(Command):
                                cls=utils.PathEncoder,
                                separators=(',', ': '))
         return highlight(json_data,
-                         JsonLexer(indent=2),
+                         lexers.JsonLexer(indent=2),
                          Terminal256Formatter(bg="dark"))
 
     def run(self, current_path, resource=''):
@@ -173,6 +177,50 @@ class Exit(Command):
         raise EOFError
 
 
+class Edit(ExperimentalCommand):
+    description = "Edit resource"
+    resource = Arg(nargs="?", help="Resource path")
+
+    def _calculate_minimal_diff(self, data, changes):
+        diff = {
+            self.resource_name: {}
+        }
+        changed_keys = [change[0][0] for change in changes]
+        for key, values in data.items():
+            if key in changed_keys:
+                diff[self.resource_name][key] = values
+        return diff
+
+    def run(self, path, resource=None):
+        target = utils.Path(str(path), resource)
+        editor = os.environ.get('EDITOR', 'vim')
+        self.resource_name = target.resource_name
+
+        old_data = APIClient().get(target)[self.resource_name]
+        old_data_json = utils.to_json(old_data)
+        with tempfile.NamedTemporaryFile(suffix='tmp.json') as tmp:
+            tmp.write(bytes(old_data_json, 'utf-8'))
+            tmp.flush()
+            subprocess.call([editor, tmp.name])
+            tmp.seek(0)
+            new_data_json = tmp.read().decode('utf-8')
+            new_data = utils.from_json(new_data_json)
+            if old_data != new_data:
+                changes = json_delta.load_and_diff(old_data_json, new_data_json,
+                                                   verbose=False)
+                print("About to commit:\n")
+                json_diff = "\n".join(json_delta.load_and_udiff(old_data_json,
+                                                                new_data_json,
+                                                                stanzas=changes))
+                print(highlight(json_diff,
+                                lexers.DiffLexer(),
+                                Terminal256Formatter(bg="dark")))
+
+                if utils.continue_prompt():
+                    diff = self._calculate_minimal_diff(new_data, changes)
+                    APIClient().put(target, data=diff)
+
+
 class Help(Command):
 
     def run(self, current_path):
@@ -190,3 +238,4 @@ help = Help()
 count = Count()
 rm = Rm()
 exit = Exit()
+edit = vim = emacs = Edit()
