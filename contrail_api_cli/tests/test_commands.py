@@ -6,7 +6,7 @@ except ImportError:
     import unittest.mock as mock
 
 import contrail_api_cli.commands as cmds
-from contrail_api_cli.utils import Path
+from contrail_api_cli.utils import Path, Collection, Resource, COMPLETION_QUEUE
 from contrail_api_cli.client import APIClient
 
 
@@ -28,17 +28,24 @@ class TestCommands(unittest.TestCase):
     @mock.patch('contrail_api_cli.commands.APIClient.get')
     def test_home_ls(self, mock_get):
         p = Path("/")
-        expected_home_resources = [
-            Path("/instance-ip"),
+        expected_home_resources = Collection(path=p, retrieve=False)
+        expected_home_resources.items = [
+            Collection(
+                path=Path("/instance-ip"),
+                href=APIClient.base_url + "/instance-ip",
+                name="instance-ip",
+                rel="resource-base"
+            )
         ]
-
         mock_get.return_value = {
             "href": APIClient.base_url,
             "links": [
-                {"link": {"href": Path("/instance-ip"),
+                {"link": {"href": APIClient.base_url + "/instance-ips",
+                          "path": Path("/instance-ips"),
                           "name": "instance-ip",
                           "rel": "collection"}},
-                {"link": {"href": Path("/instance-ip"),
+                {"link": {"href": APIClient.base_url + "/instance-ip",
+                          "path": Path("/instance-ip"),
                           "name": "instance-ip",
                           "rel": "resource-base"}}
             ]
@@ -51,26 +58,36 @@ class TestCommands(unittest.TestCase):
         p = Path("/instance-ip")
         mock_get.return_value = {
             "instance-ips": [
-                {"href": Path("/instance-ip/ec1afeaa-8930-43b0-a60a-939f23a50724"),
+                {"path": Path("/instance-ip/ec1afeaa-8930-43b0-a60a-939f23a50724"),
                  "uuid": "ec1afeaa-8930-43b0-a60a-939f23a50724"},
-                {"href": Path("/instance-ip/c2588045-d6fb-4f37-9f46-9451f653fb6a"),
+                {"path": Path("/instance-ip/c2588045-d6fb-4f37-9f46-9451f653fb6a"),
                  "uuid": "c2588045-d6fb-4f37-9f46-9451f653fb6a"}
             ]
         }
-        expected_resources = [
-            Path("/instance-ip/ec1afeaa-8930-43b0-a60a-939f23a50724"),
-            Path("/instance-ip/c2588045-d6fb-4f37-9f46-9451f653fb6a"),
+        expected_resources = Collection(path=p, retrieve=False)
+        expected_resources.items = [
+            Resource(
+                path=Path("/instance-ip/ec1afeaa-8930-43b0-a60a-939f23a50724"),
+                retrieve=False,
+                uuid="ec1afeaa-8930-43b0-a60a-939f23a50724"
+            ),
+            Resource(
+                path=Path("/instance-ip/c2588045-d6fb-4f37-9f46-9451f653fb6a"),
+                retrieve=False,
+                uuid="c2588045-d6fb-4f37-9f46-9451f653fb6a"
+            )
         ]
+
         _, result = cmds.ls(p)
         self.assertEqual(result, expected_resources)
 
     @mock.patch('contrail_api_cli.commands.APIClient.get')
-    @mock.patch('contrail_api_cli.commands.Ls.colorize')
-    def test_resource_ls(self, mock_colorize, mock_get):
+    def test_resource_ls(self, mock_get):
         p = Path('/foo')
         mock_get.return_value = {
             "foo": {
-                "href": Path("/foo/ec1afeaa-8930-43b0-a60a-939f23a50724"),
+                "href": APIClient.base_url + "/foo/ec1afeaa-8930-43b0-a60a-939f23a50724",
+                "path": Path("/foo/ec1afeaa-8930-43b0-a60a-939f23a50724"),
                 "attr": None,
                 "fq_name": [
                     "foo",
@@ -78,7 +95,8 @@ class TestCommands(unittest.TestCase):
                 ],
                 "bar_refs": [
                     {
-                        "href": Path("/bar/ec1afeaa-8930-43b0-a60a-939f23a50724"),
+                        "href": APIClient.base_url + "/bar/ec1afeaa-8930-43b0-a60a-939f23a50724",
+                        "path": Path("/bar/ec1afeaa-8930-43b0-a60a-939f23a50724"),
                         "to": [
                             "bar",
                             "ec1afeaa-8930-43b0-a60a-939f23a50724"
@@ -87,30 +105,44 @@ class TestCommands(unittest.TestCase):
                 ]
             }
         }
-        mock_colorize.side_effect = lambda d: d
-        expected_resource = {
-            "href": Path("ec1afeaa-8930-43b0-a60a-939f23a50724"),
-            "fq_name": "foo:ec1afeaa-8930-43b0-a60a-939f23a50724",
+        expected_resource = Resource(path=p / 'ec1afeaa-8930-43b0-a60a-939f23a50724',
+                                     retrieve=False)
+        expected_resource.update({
+            "href": APIClient.base_url + "/foo/ec1afeaa-8930-43b0-a60a-939f23a50724",
+            "path": Path("/foo/ec1afeaa-8930-43b0-a60a-939f23a50724"),
+            "attr": None,
+            "fq_name": [
+                "foo",
+                "ec1afeaa-8930-43b0-a60a-939f23a50724"
+            ],
             "bar_refs": [
                 {
-                    "href": Path("/bar/ec1afeaa-8930-43b0-a60a-939f23a50724"),
-                    "to": "bar:ec1afeaa-8930-43b0-a60a-939f23a50724"
+                    "href": APIClient.base_url + "/bar/ec1afeaa-8930-43b0-a60a-939f23a50724",
+                    "path": Path("/bar/ec1afeaa-8930-43b0-a60a-939f23a50724"),
+                    "to": [
+                        "bar",
+                        "ec1afeaa-8930-43b0-a60a-939f23a50724"
+                    ]
                 }
             ]
-        }
+        })
+
         _, result = cmds.ls(p, 'ec1afeaa-8930-43b0-a60a-939f23a50724')
         self.assertEqual(result, expected_resource)
+        self.assertEqual(result.fq_name, "foo:ec1afeaa-8930-43b0-a60a-939f23a50724")
+        found_paths = []
+        while not COMPLETION_QUEUE.empty():
+            found_paths.append(COMPLETION_QUEUE.get().path)
+        self.assertIn(Path("/bar/ec1afeaa-8930-43b0-a60a-939f23a50724"), found_paths)
 
     @mock.patch('contrail_api_cli.commands.APIClient.fqname_to_id')
     @mock.patch('contrail_api_cli.commands.APIClient.get')
-    @mock.patch('contrail_api_cli.commands.Ls.colorize')
-    def test_fqname_ls(self, mock_colorize, mock_get, mock_fqname_to_id):
+    def test_fqname_ls(self, mock_get, mock_fqname_to_id):
         p = Path('/foo')
         fq_name = "default-domain:foo:b25f5a6b-292f-4d0c-b5c6-22ad7209abe5"
-        excpected_path = Path("/foo/b25f5a6b-292f-4d0c-b5c6-22ad7209abe5")
+        expected_path = Path("/foo/b25f5a6b-292f-4d0c-b5c6-22ad7209abe5")
 
-        mock_colorize.side_effect = lambda d: d
-        mock_fqname_to_id.return_value = excpected_path
+        mock_fqname_to_id.return_value = expected_path
 
         cmds.ls(p, fq_name)
 
@@ -118,7 +150,7 @@ class TestCommands(unittest.TestCase):
             mock.call(p, fq_name)
         ])
         mock_get.assert_has_calls([
-            mock.call(excpected_path)
+            mock.call(expected_path)
         ])
 
     @mock.patch('contrail_api_cli.commands.APIClient.fqname_to_id')

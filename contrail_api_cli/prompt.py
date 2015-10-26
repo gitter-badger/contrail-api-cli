@@ -1,5 +1,4 @@
 import sys
-import pprint
 import argparse
 
 from prompt_toolkit import prompt
@@ -16,8 +15,8 @@ from contrail_api_cli import utils, commands
 CURRENT_PATH = utils.Path('/')
 
 history = InMemoryHistory()
-completer = utils.PathCompleter(match_middle=True)
-utils.PathCompletionFiller(completer).start()
+completer = utils.ResourceCompleter()
+utils.ResourceCompletionFiller(completer).start()
 
 
 def get_prompt_tokens(cli):
@@ -53,8 +52,8 @@ def main():
     auth_plugin = auth.load_from_argparse_arguments(options)
     APIClient.SESSION = session.Session.load_from_cli_options(options, auth=auth_plugin)
 
-    for p in APIClient().list(CURRENT_PATH):
-        utils.COMPLETION_QUEUE.put(p)
+    # load home resources
+    utils.Collection(path=CURRENT_PATH)
 
     while True:
         try:
@@ -89,16 +88,7 @@ def main():
         else:
             if result is None:
                 continue
-            elif type(result) == list:
-                output_paths = []
-                for p in result:
-                    output_paths.append(str(p.relative_to(CURRENT_PATH)))
-                    utils.COMPLETION_QUEUE.put(p)
-                print("\n".join(output_paths))
-            elif type(result) == dict:
-                print(pprint.pformat(result, indent=2))
-            else:
-                print(result)
+            print(result)
 
 if __name__ == "__main__":
     main()
