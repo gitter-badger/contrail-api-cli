@@ -1,3 +1,4 @@
+import sys
 import inspect
 import argparse
 import json
@@ -86,9 +87,12 @@ class Ls(Command):
         json_data = json.dumps(data, sort_keys=True, indent=2,
                                cls=utils.PathEncoder,
                                separators=(',', ': '))
-        return highlight(json_data,
-                         JsonLexer(indent=2),
-                         Terminal256Formatter(bg="dark"))
+        if sys.stdout.isatty():
+            return highlight(json_data,
+                             JsonLexer(indent=2),
+                             Terminal256Formatter(bg="dark"))
+        else:
+            return json_data
 
     def run(self, resource=''):
         # Find Path from fq_name
